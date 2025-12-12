@@ -1,0 +1,5 @@
+{
+  "name": "WeChat Auto-Writer",
+  "description": "A fully automated AI agent that researches daily hot topics, writes engaging articles styled for WeChat Official Accounts, and generates matching cover images.",
+  "requestFramePermissions": []
+}
