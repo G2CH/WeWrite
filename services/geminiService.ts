@@ -97,7 +97,8 @@ export const searchTrendingTopics = async (category: string): Promise<SearchResu
 export const runEditorAgent = async (
   topicTitle: string, 
   topicDescription: string, 
-  userInstructions: string
+  userInstructions: string,
+  style: string
 ): Promise<ArticlePlan> => {
   const model = "gemini-2.5-flash"; // Flash is fast and good enough for planning
 
@@ -106,13 +107,14 @@ export const runEditorAgent = async (
     
     当前热点话题：${topicTitle}
     背景信息：${topicDescription}
+    【重要】指定文章风格：${style}
     用户特别指令：${userInstructions || "无"}
 
     任务：请策划一篇能产生“爆款”潜质的文章结构。
     
     请思考：
-    1. 寻找一个独特的切入点（Angle），不要记流水账，要有观点或情感共鸣。
-    2. 确定文章的情感基调（Tone），例如：犀利、幽默、温情、焦虑、硬核科普等。
+    1. 寻找一个独特的切入点（Angle），必须严格符合“${style}”的风格设定。
+    2. 确定文章的情感基调（Tone），例如：${style}。
     3. 制定目标受众（Target Audience）。
     4. 列出文章大纲（Outline），包含 4-6 个小标题。
 
@@ -267,13 +269,11 @@ const getRobustFallbackImages = (query: string): string[] => {
   const q = encodeURIComponent(query);
   return [
     `https://tse1.mm.bing.net/th?q=${q}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse2.mm.bing.net/th?q=${encodeURIComponent(query + " wallpaper")}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse3.mm.bing.net/th?q=${encodeURIComponent(query + " photography")}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse4.mm.bing.net/th?q=${encodeURIComponent(query + " hd")}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse1.mm.bing.net/th?q=${encodeURIComponent(query + " background")}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse2.mm.bing.net/th?q=${encodeURIComponent(query + " news")}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse3.mm.bing.net/th?q=${encodeURIComponent(query + " art")}&w=800&h=450&c=7&rs=1&p=0`,
-    `https://tse4.mm.bing.net/th?q=${encodeURIComponent(query + " illustration")}&w=800&h=450&c=7&rs=1&p=0`,
+    `https://tse2.mm.bing.net/th?q=${encodeURIComponent(query + " photography")}&w=800&h=450&c=7&rs=1&p=0`,
+    `https://tse3.mm.bing.net/th?q=${encodeURIComponent(query + " illustration")}&w=800&h=450&c=7&rs=1&p=0`,
+    `https://tse4.mm.bing.net/th?q=${encodeURIComponent(query + " wallpaper")}&w=800&h=450&c=7&rs=1&p=0`,
+    `https://tse1.mm.bing.net/th?q=${encodeURIComponent(query + " abstract")}&w=800&h=450&c=7&rs=1&p=0`,
+    `https://tse2.mm.bing.net/th?q=${encodeURIComponent(query + " concept art")}&w=800&h=450&c=7&rs=1&p=0`,
   ];
 };
 
@@ -282,29 +282,23 @@ const getRobustFallbackImages = (query: string): string[] => {
  */
 export const searchRelatedImage = async (query: string): Promise<string> => {
   const candidates = await searchImageOptions(query);
-  if (candidates.length > 0) return candidates[0];
-  
-  // Fallback proxy
-  return getRobustFallbackImages(query)[0];
+  return candidates[0] || getRobustFallbackImages(query)[0];
 };
 
 /**
  * Enhanced Tool: Search for multiple image options.
+ * Uses AI to expand keywords, then generates reliable search proxies.
  */
 export const searchImageOptions = async (query: string): Promise<string[]> => {
+  // 1. Direct matches (Fastest)
+  const directMatches = getRobustFallbackImages(query);
+  
+  // 2. AI Keyword Expansion for Variety
   const model = "gemini-2.5-flash";
   const prompt = `
-    You are an image researcher.
-    Search for 8 high-quality image URLs related to "${query}".
-    
-    Instructions:
-    1. Prefer direct image links (ending in jpg, png, webp).
-    2. If you find news articles, extract the main image URL from them.
-    3. Return ONLY a valid JSON array of strings. 
-    4. NO markdown formatting, NO code blocks.
-    
-    Example Output:
-    ["https://site.com/img1.jpg", "https://site.com/img2.jpg"]
+    Give me 3 distinct, visually descriptive short keywords related to: "${query}".
+    Example: for "AI", give ["Futuristic Robot", "Neural Network Glowing", "Cyberpunk City"].
+    Return ONLY a JSON array of strings.
   `;
 
   try {
@@ -312,43 +306,25 @@ export const searchImageOptions = async (query: string): Promise<string[]> => {
       model,
       contents: prompt,
       config: {
-        tools: [{ googleSearch: {} }],
-        // responseMimeType: "application/json", // REMOVED: Incompatible with googleSearch in this context
+        responseMimeType: "application/json",
+        responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+        }
       }
     });
 
-    let text = response.text || "[]";
+    const keywords = JSON.parse(response.text || "[]") as string[];
     
-    // Cleanup Markdown if present
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Generate urls for related keywords
+    const relatedImages = keywords.flatMap(k => getRobustFallbackImages(k).slice(0, 2));
     
-    let urls = [];
-    try {
-        urls = JSON.parse(text);
-    } catch (e) {
-        console.warn("JSON parse failed for image search results:", text);
-        // If JSON parsing fails, we rely on fallbacks
-        urls = [];
-    }
-    
-    // Validate result is array
-    if (!Array.isArray(urls)) {
-        urls = [];
-    }
-
-    // Combine with robust fallbacks to ensure we always have plenty of options
-    // Even if AI finds some, we add fallbacks to the end to guarantee variety
-    const fallbacks = getRobustFallbackImages(query);
-    
-    // Dedup and merge: Take unique AI results, then fill remainder with fallbacks
-    const combined = Array.from(new Set([...urls, ...fallbacks]));
-    
-    // Return top 10
-    return combined.slice(0, 10);
+    // Combine unique URLs
+    const all = [...directMatches, ...relatedImages];
+    return Array.from(new Set(all));
     
   } catch (e) {
-    console.error("Image search failed, using fallbacks", e);
-    // Return full list of proxy fallbacks
-    return getRobustFallbackImages(query);
+    console.warn("Image search keyword expansion failed, falling back to direct matches", e);
+    return directMatches;
   }
 };

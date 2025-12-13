@@ -21,7 +21,6 @@ import {
   Bold,
   Italic,
   Strikethrough,
-  Heading1,
   Heading2,
   Heading3,
   Quote,
@@ -32,13 +31,12 @@ import {
   Link2,
   Table as TableIcon,
   Minus,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Maximize2,
-  Send
+  Send,
+  X,
+  Filter
 } from 'lucide-react';
-import { AppStep, TopicCategory, SearchResult, GeneratedArticle, Topic } from './types';
+import { AppStep, TopicCategory, SearchResult, GeneratedArticle, Topic, ArticleStyle } from './types';
 import * as GeminiService from './services/geminiService';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
@@ -54,11 +52,13 @@ const App: React.FC = () => {
   
   // Selection State (Multi-select)
   const [selectedTopicIds, setSelectedTopicIds] = useState<number[]>([]);
+  const [selectedStyle, setSelectedStyle] = useState<ArticleStyle>(ArticleStyle.PROFESSIONAL);
   
   const [customInstructions, setCustomInstructions] = useState<string>("");
   
   // History / Articles State
   const [history, setHistory] = useState<GeneratedArticle[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<string>('ALL');
   const [viewingArticleId, setViewingArticleId] = useState<string | null>(null);
 
   // Derived state for current viewing article
@@ -76,6 +76,9 @@ const App: React.FC = () => {
   const [editingImageQuery, setEditingImageQuery] = useState<string>("");
   const [imageCandidates, setImageCandidates] = useState<string[]>([]);
   const [isSearchingImages, setIsSearchingImages] = useState<boolean>(false);
+  
+  // Image Preview Modal State
+  const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
 
   // --- Persistence ---
   useEffect(() => {
@@ -159,8 +162,8 @@ const App: React.FC = () => {
         // --- Multi-Agent Workflow ---
         try {
           // Agent 1: Editor
-          setLoadingMessage(`${prefix}🤵 首席主编正在策划选题角度...`);
-          const plan = await GeminiService.runEditorAgent(topic.title, topic.description, customInstructions);
+          setLoadingMessage(`${prefix}🤵 首席主编正在策划选题角度 (${selectedStyle})...`);
+          const plan = await GeminiService.runEditorAgent(topic.title, topic.description, customInstructions, selectedStyle);
           
           // Agent 2: Writer
           setLoadingMessage(`${prefix}✍️ 资深笔杆子正在撰写正文 (角度: ${plan.angle})...`);
@@ -187,9 +190,11 @@ const App: React.FC = () => {
             imageSearchQuery: visual.imageSearchQuery,
             imageUrl,
             originalTopic: topic.title,
+            category: selectedCategory,
             agentLog: {
               angle: plan.angle,
-              tone: plan.tone
+              tone: plan.tone,
+              style: selectedStyle
             }
           };
 
@@ -373,14 +378,37 @@ const App: React.FC = () => {
               active={currentStep === AppStep.TOPIC_SEARCH || currentStep === AppStep.TOPIC_SELECTION}
               onClick={() => setCurrentStep(AppStep.TOPIC_SEARCH)} 
             />
-            <div className="pt-4 pb-2">
-              <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">历史记录</p>
+            
+            <div className="flex items-center justify-between px-4 pt-6 pb-2">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">历史记录</p>
+              
+              <div className="relative group">
+                 <div className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer hover:text-emerald-600 transition-colors">
+                    <Filter size={12} />
+                    <span className="max-w-[60px] truncate">{historyFilter === 'ALL' ? '筛选' : historyFilter}</span>
+                 </div>
+                 <select 
+                    value={historyFilter}
+                    onChange={(e) => setHistoryFilter(e.target.value)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                 >
+                    <option value="ALL">全部显示</option>
+                    {Object.values(TopicCategory).map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                 </select>
+              </div>
             </div>
+
             <div className="space-y-1 overflow-y-auto max-h-[calc(100vh-250px)] no-scrollbar">
-              {history.length === 0 && (
-                <div className="px-4 text-xs text-gray-400 italic py-2">暂无历史记录</div>
+              {history.filter(item => historyFilter === 'ALL' || item.category === historyFilter).length === 0 && (
+                <div className="px-4 text-xs text-gray-400 italic py-2">
+                    {historyFilter === 'ALL' ? '暂无历史记录' : '该分类下无记录'}
+                </div>
               )}
-              {history.map(item => (
+              {history
+                .filter(item => historyFilter === 'ALL' || item.category === historyFilter)
+                .map(item => (
                 <button
                   key={item.id}
                   onClick={() => {
@@ -488,13 +516,26 @@ const App: React.FC = () => {
                      <h2 className="text-2xl font-bold text-gray-900">精选热点</h2>
                      <p className="text-gray-500 text-sm mt-1">从全网 {searchResult.sources.length} 个来源中提取了 {searchResult.topics.length} 个话题</p>
                   </div>
-                  <button 
-                      onClick={toggleSelectAll}
-                      className="text-sm font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-                  >
-                      {selectedTopicIds.length === searchResult.topics.length ? <CheckSquare size={16}/> : <Square size={16}/>}
-                      {selectedTopicIds.length === searchResult.topics.length ? "取消全选" : "全选"}
-                  </button>
+                  
+                  <div className="flex gap-3">
+                    <button 
+                        onClick={handleSearch}
+                        className="text-sm font-medium text-gray-600 hover:text-emerald-600 bg-white border border-gray-200 hover:border-emerald-200 px-3 py-2 rounded-lg transition-all flex items-center gap-2 shadow-sm"
+                        title="重新获取热点话题"
+                        disabled={loading}
+                    >
+                        <RefreshCw size={16} className={loading ? "animate-spin" : ""}/>
+                        换一换
+                    </button>
+                    
+                    <button 
+                        onClick={toggleSelectAll}
+                        className="text-sm font-medium text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                    >
+                        {selectedTopicIds.length === searchResult.topics.length ? <CheckSquare size={16}/> : <Square size={16}/>}
+                        {selectedTopicIds.length === searchResult.topics.length ? "取消全选" : "全选"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -535,10 +576,10 @@ const App: React.FC = () => {
                  编辑部指令
                </h3>
 
-               <div className="flex-1 space-y-6">
+               <div className="flex-1 space-y-6 overflow-y-auto">
                  <div>
                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">已选话题</label>
-                   <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 min-h-[100px] max-h-[300px] overflow-y-auto">
+                   <div className="bg-gray-50 rounded-lg p-3 border border-gray-100 min-h-[100px] max-h-[200px] overflow-y-auto">
                      {selectedTopicIds.length === 0 ? (
                        <p className="text-gray-400 text-sm italic text-center py-4">请在左侧选择话题</p>
                      ) : (
@@ -557,18 +598,38 @@ const App: React.FC = () => {
                    </div>
                  </div>
 
+                 {/* Article Style Selector */}
+                 <div>
+                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">文章风格</label>
+                   <div className="grid grid-cols-2 gap-2">
+                     {Object.values(ArticleStyle).map((style) => (
+                       <button
+                         key={style}
+                         onClick={() => setSelectedStyle(style)}
+                         className={`px-3 py-2 text-sm rounded-lg border transition-all ${
+                           selectedStyle === style 
+                           ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" 
+                           : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
+                         }`}
+                       >
+                         {style}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+
                  <div>
                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">给主编的特殊指令 (可选)</label>
                    <textarea
                      value={customInstructions}
                      onChange={(e) => setCustomInstructions(e.target.value)}
                      placeholder="例如：文章风格要犀利一点，强调对普通人的影响..."
-                     className="w-full h-32 p-3 rounded-lg bg-white border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none text-sm resize-none"
+                     className="w-full h-24 p-3 rounded-lg bg-white border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none text-sm resize-none"
                    />
                  </div>
                </div>
 
-               <div className="mt-6 pt-6 border-t border-gray-100">
+               <div className="mt-6 pt-6 border-t border-gray-100 shrink-0">
                  <button
                    onClick={handleBatchGenerate}
                    disabled={selectedTopicIds.length === 0}
@@ -586,237 +647,280 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* STEP 3: EDITOR (Doocs Style) */}
+        {/* STEP 3: EDITOR & EXPORT */}
         {currentStep === AppStep.REVIEW_AND_EXPORT && (
-          <div className="flex-1 flex overflow-hidden bg-white">
-            {currentArticle ? (
-              <>
-                {/* 1. EDITOR PANE */}
-                <div className="flex-1 flex flex-col border-r border-gray-200 min-w-[320px] max-w-[50%] bg-white z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-                    
-                    {/* Toolbar */}
-                    <div className="px-4 py-2 border-b border-gray-200 bg-[#f9f9f9] flex flex-wrap gap-1 items-center z-20">
-                        <ToolbarButton icon={Bold} onClick={() => insertText("**", "**")} title="加粗 (Ctrl+B)" />
-                        <ToolbarButton icon={Italic} onClick={() => insertText("*", "*")} title="斜体 (Ctrl+I)" />
-                        <ToolbarButton icon={Strikethrough} onClick={() => insertText("~~", "~~")} title="删除线 (Ctrl+D)" />
-                        
-                        <ToolbarDivider />
-                        
-                        <ToolbarButton icon={Heading2} onClick={() => insertText("## ")} title="二级标题" />
-                        <ToolbarButton icon={Heading3} onClick={() => insertText("### ")} title="三级标题" />
-                        
-                        <ToolbarDivider />
-                        
-                        <ToolbarButton icon={Quote} onClick={() => insertText("> ")} title="引用" />
-                        <ToolbarButton icon={List} onClick={() => insertText("- ")} title="无序列表" />
-                        <ToolbarButton icon={ListOrdered} onClick={() => insertText("1. ")} title="有序列表" />
-                        <ToolbarButton icon={CheckSquare} onClick={() => insertText("- [ ] ")} title="任务列表" />
-                        
-                        <ToolbarDivider />
-                        
-                        <ToolbarButton icon={Code} onClick={() => insertText("```\n", "\n```")} title="代码块" />
-                        <ToolbarButton icon={Link2} onClick={() => insertText("[链接文字](", ")")} title="链接" />
-                        <ToolbarButton icon={TableIcon} onClick={() => insertText("| 标题1 | 标题2 |\n| --- | --- |\n| 内容1 | 内容2 |")} title="表格" />
-                        <ToolbarButton icon={Minus} onClick={() => insertText("\n---\n")} title="分割线" />
+          <div className="flex-1 flex flex-col overflow-hidden bg-white">
+            
+            {/* --- TOP ACTION BAR --- */}
+            {currentArticle && (
+              <header className="h-16 border-b border-gray-200 bg-white px-6 flex items-center justify-between shrink-0 z-30">
+                  <div className="flex items-center gap-4">
+                      <button
+                          onClick={() => {
+                              setCurrentStep(AppStep.TOPIC_SEARCH);
+                              setSearchResult(null);
+                          }}
+                          className="text-gray-500 hover:text-gray-900 hover:bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                      >
+                          <ChevronLeft size={16} />
+                          返回创作中心
+                      </button>
+                      <div className="h-6 w-px bg-gray-300"></div>
+                      <span className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                          {currentArticle.category || "未分类"}
+                      </span>
+                      <span className="text-sm font-medium text-gray-600 max-w-[300px] truncate" title={currentArticle.title}>
+                          {currentArticle.title}
+                      </span>
+                  </div>
 
-                        <div className="flex-1"></div>
+                  <div className="flex items-center gap-3">
+                      {lastSaved > 0 && <span className="text-xs text-gray-400 mr-2">已保存 {formatDate(lastSaved)}</span>}
+                      
+                      <button
+                         onClick={saveContentChanges}
+                         className="px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-sm font-medium flex items-center gap-2 transition-all"
+                      >
+                         <Save size={16} />
+                         保存
+                      </button>
+
+                      <button
+                          onClick={copyMarkdown}
+                          className="px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg text-sm font-medium flex items-center gap-2 transition-all"
+                      >
+                          <Copy size={16} />
+                          复制 MD
+                      </button>
+
+                      <button
+                          id="copy-wx-btn"
+                          onClick={copyToWeChat}
+                          className="px-4 py-2 bg-[#07c160] hover:bg-[#06ad56] text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-sm shadow-emerald-100"
+                      >
+                          <Send size={16} />
+                          复制到公众号
+                      </button>
+                  </div>
+              </header>
+            )}
+
+            <div className="flex-1 flex overflow-hidden">
+                {currentArticle ? (
+                  <>
+                    {/* 1. EDITOR PANE */}
+                    <div className="flex-1 flex flex-col border-r border-gray-200 min-w-[320px] max-w-[50%] bg-white z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
                         
-                        {/* Save Action */}
-                         <div className="flex items-center gap-2">
-                             {lastSaved > 0 && <span className="text-xs text-gray-400">已保存</span>}
-                             <button onClick={saveContentChanges} className="p-1.5 hover:bg-emerald-100 text-emerald-600 rounded transition-colors" title="保存">
-                               <Save size={18}/>
-                             </button>
+                        {/* Toolbar */}
+                        <div className="px-4 py-2 border-b border-gray-200 bg-[#f9f9f9] flex flex-wrap gap-1 items-center z-20">
+                            <ToolbarButton icon={Bold} onClick={() => insertText("**", "**")} title="加粗 (Ctrl+B)" />
+                            <ToolbarButton icon={Italic} onClick={() => insertText("*", "*")} title="斜体 (Ctrl+I)" />
+                            <ToolbarButton icon={Strikethrough} onClick={() => insertText("~~", "~~")} title="删除线 (Ctrl+D)" />
+                            
+                            <ToolbarDivider />
+                            
+                            <ToolbarButton icon={Heading2} onClick={() => insertText("## ")} title="二级标题" />
+                            <ToolbarButton icon={Heading3} onClick={() => insertText("### ")} title="三级标题" />
+                            
+                            <ToolbarDivider />
+                            
+                            <ToolbarButton icon={Quote} onClick={() => insertText("> ")} title="引用" />
+                            <ToolbarButton icon={List} onClick={() => insertText("- ")} title="无序列表" />
+                            <ToolbarButton icon={ListOrdered} onClick={() => insertText("1. ")} title="有序列表" />
+                            <ToolbarButton icon={CheckSquare} onClick={() => insertText("- [ ] ")} title="任务列表" />
+                            
+                            <ToolbarDivider />
+                            
+                            <ToolbarButton icon={Code} onClick={() => insertText("```\n", "\n```")} title="代码块" />
+                            <ToolbarButton icon={Link2} onClick={() => insertText("[链接文字](", ")")} title="链接" />
+                            <ToolbarButton icon={TableIcon} onClick={() => insertText("| 标题1 | 标题2 |\n| --- | --- |\n| 内容1 | 内容2 |")} title="表格" />
+                            <ToolbarButton icon={Minus} onClick={() => insertText("\n---\n")} title="分割线" />
+                        </div>
+
+                        {/* Metadata Inputs (Title & Summary) */}
+                        <div className="px-6 py-4 border-b border-gray-100 bg-white space-y-3">
+                            <input
+                                type="text"
+                                value={editedTitle}
+                                onChange={(e) => setEditedTitle(e.target.value)}
+                                className="w-full text-xl font-bold text-gray-800 outline-none bg-transparent placeholder-gray-300"
+                                placeholder="文章标题"
+                            />
+                            <input
+                                type="text"
+                                value={editedSummary}
+                                onChange={(e) => setEditedSummary(e.target.value)}
+                                className="w-full text-sm text-gray-500 outline-none bg-transparent placeholder-gray-300 border-b border-dashed border-gray-200 focus:border-emerald-400 pb-1 transition-colors"
+                                placeholder="摘要（显示在封面卡片）"
+                            />
+                        </div>
+
+                        {/* Editor Textarea */}
+                        <textarea
+                            ref={textareaRef}
+                            value={editedContent}
+                            onChange={(e) => setEditedContent(e.target.value)}
+                            className="flex-1 w-full resize-none p-6 outline-none font-mono text-[14px] leading-relaxed text-gray-700 bg-white"
+                            spellCheck={false}
+                            placeholder="在此输入 Markdown 内容..."
+                        />
+                    </div>
+
+                    {/* 2. PREVIEW PANE (WeChat Style) */}
+                    <div className="flex-1 bg-[#f0f2f5] overflow-y-auto relative flex flex-col items-center p-8">
+                        <div 
+                            id="wx-article-preview"
+                            className="w-full max-w-[480px] bg-white min-h-[calc(100%-2rem)] shadow-sm flex-shrink-0 flex flex-col"
+                        >
+                            
+                            {/* Preview Header */}
+                            <div className="px-5 pt-8 pb-6 flex-1">
+                                <h1 className="text-[22px] font-bold text-[#333] leading-[1.4] mb-4">
+                                  {editedTitle || "无标题"}
+                                </h1>
+                                <div className="flex items-center gap-2 text-[15px] text-[rgba(0,0,0,0.3)] mb-6">
+                                    <span className="text-[#576b95] font-medium cursor-pointer">AI 编辑部</span>
+                                    <span className="text-[rgba(0,0,0,0.3)]">{formatDate(currentArticle.createdAt)}</span>
+                                </div>
+
+                                {/* Cover Image */}
+                                <div 
+                                  className="mb-6 rounded-[4px] overflow-hidden aspect-[2.35/1] relative bg-gray-100 group cursor-zoom-in" 
+                                  onClick={() => currentArticle.imageUrl && setIsImageModalOpen(true)}
+                                >
+                                    {currentArticle.imageUrl ? (
+                                        <>
+                                            <img 
+                                                src={currentArticle.imageUrl} 
+                                                onError={handleImageError}
+                                                alt="Cover" 
+                                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                                            />
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                <Maximize2 className="text-white drop-shadow-md" size={32} />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-gray-300 flex-col gap-2">
+                                            <ImageIcon size={24}/>
+                                            <span className="text-xs">无封面图</span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* Summary Block */}
+                                {editedSummary && (
+                                    <section className="mb-8 p-4 bg-[#f7f7f7] text-[14px] text-[#666] leading-6 rounded-[4px] border border-[#eee]">
+                                        <span className="font-bold text-[#333] mr-2">摘要</span>
+                                        {editedSummary}
+                                    </section>
+                                )}
+                                
+                                {/* Main Content Render */}
+                                <MarkdownRenderer content={editedContent} />
+                            </div>
+                        </div>
+                        <div className="pb-8 pt-4 text-xs text-gray-400">
+                            预览效果尽可能还原微信样式
+                        </div>
+                    </div>
+
+                    {/* 3. RIGHT SIDEBAR (Image Management Only) */}
+                    <div className="w-80 bg-white border-l border-gray-200 flex flex-col z-20 overflow-y-auto shrink-0">
+                         <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                                 <Palette size={16} className="text-emerald-600"/> 配图管理
+                            </h3>
+                         </div>
+                         
+                         <div className="p-4 space-y-6">
+                            {/* Image Search Section */}
+                            <div className="space-y-3">
+                               <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">搜索封面图</label>
+                               <div className="flex gap-2">
+                                  <input 
+                                    type="text" 
+                                    value={editingImageQuery}
+                                    onChange={(e) => setEditingImageQuery(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleImageSearch()}
+                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-emerald-500 transition-colors"
+                                    placeholder="输入关键词..."
+                                  />
+                                  <button 
+                                     onClick={handleImageSearch}
+                                     disabled={isSearchingImages}
+                                     className="bg-emerald-50 text-emerald-600 p-2 rounded-lg hover:bg-emerald-100 transition-colors"
+                                  >
+                                     {isSearchingImages ? <Loader2 size={16} className="animate-spin"/> : <Search size={16}/>}
+                                  </button>
+                               </div>
+
+                               {imageCandidates.length > 0 ? (
+                                   <div className="grid grid-cols-2 gap-2 mt-2">
+                                       {imageCandidates.map((url, idx) => (
+                                           <button 
+                                             key={idx}
+                                             onClick={() => handleSelectImage(url)}
+                                             className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all group ${
+                                                 currentArticle.imageUrl === url ? "border-emerald-500 ring-2 ring-emerald-200" : "border-transparent hover:border-gray-300"
+                                             }`}
+                                           >
+                                               <img src={url} alt="Candidate" className="w-full h-full object-cover"/>
+                                               {currentArticle.imageUrl === url && (
+                                                   <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                                                       <CheckCircle2 size={16} className="text-white drop-shadow-md"/>
+                                                   </div>
+                                               )}
+                                           </button>
+                                       ))}
+                                   </div>
+                               ) : (
+                                  <div className="text-center py-8 text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                      <ImageIcon size={24} className="mx-auto mb-2 opacity-30"/>
+                                      <span className="text-xs">输入关键词并回车搜索</span>
+                                  </div>
+                               )}
+                            </div>
                          </div>
                     </div>
-
-                    {/* Metadata Inputs (Title & Summary) */}
-                    <div className="px-6 py-4 border-b border-gray-100 bg-white space-y-3">
-                        <input
-                            type="text"
-                            value={editedTitle}
-                            onChange={(e) => setEditedTitle(e.target.value)}
-                            className="w-full text-xl font-bold text-gray-800 outline-none bg-transparent placeholder-gray-300"
-                            placeholder="文章标题"
-                        />
-                        <input
-                            type="text"
-                            value={editedSummary}
-                            onChange={(e) => setEditedSummary(e.target.value)}
-                            className="w-full text-sm text-gray-500 outline-none bg-transparent placeholder-gray-300 border-b border-dashed border-gray-200 focus:border-emerald-400 pb-1 transition-colors"
-                            placeholder="摘要（显示在封面卡片）"
-                        />
-                    </div>
-
-                    {/* Editor Textarea */}
-                    <textarea
-                        ref={textareaRef}
-                        value={editedContent}
-                        onChange={(e) => setEditedContent(e.target.value)}
-                        className="flex-1 w-full resize-none p-6 outline-none font-mono text-[14px] leading-relaxed text-gray-700 bg-white"
-                        spellCheck={false}
-                        placeholder="在此输入 Markdown 内容..."
-                    />
-                </div>
-
-                {/* 2. PREVIEW PANE (WeChat Style) */}
-                <div className="flex-1 bg-[#f0f2f5] overflow-y-auto relative flex flex-col items-center p-8">
-                    <div 
-                        id="wx-article-preview"
-                        className="w-full max-w-[480px] bg-white min-h-full shadow-sm flex-shrink-0"
-                    >
-                        
-                        {/* Preview Header */}
-                        <div className="px-5 pt-8 pb-6">
-                            <h1 className="text-[22px] font-bold text-[#333] leading-[1.4] mb-4">
-                              {editedTitle || "无标题"}
-                            </h1>
-                            <div className="flex items-center gap-2 text-[15px] text-[rgba(0,0,0,0.3)] mb-6">
-                                <span className="text-[#576b95] font-medium cursor-pointer">AI 编辑部</span>
-                                <span className="text-[rgba(0,0,0,0.3)]">{formatDate(currentArticle.createdAt)}</span>
-                            </div>
-
-                            {/* Cover Image */}
-                            <div className="mb-6 rounded-[4px] overflow-hidden aspect-[2.35/1] relative bg-gray-100">
-                                {currentArticle.imageUrl ? (
-                                    <img 
-                                        src={currentArticle.imageUrl} 
-                                        onError={handleImageError}
-                                        alt="Cover" 
-                                        className="w-full h-full object-cover" 
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-gray-300 flex-col gap-2">
-                                        <ImageIcon size={24}/>
-                                        <span className="text-xs">无封面图</span>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            {/* Summary Block */}
-                            {editedSummary && (
-                                <section className="mb-8 p-4 bg-[#f7f7f7] text-[14px] text-[#666] leading-6 rounded-[4px] border border-[#eee]">
-                                    <span className="font-bold text-[#333] mr-2">摘要</span>
-                                    {editedSummary}
-                                </section>
-                            )}
-                            
-                            {/* Main Content Render */}
-                            <MarkdownRenderer content={editedContent} />
+                  </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-4">
+                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
+                            <Layout size={24} className="text-gray-300"/>
                         </div>
+                        <p className="text-sm">请从左侧选择文章</p>
                     </div>
-                    <div className="pb-8 pt-4 text-xs text-gray-400">
-                        预览效果尽可能还原微信样式
-                    </div>
-                </div>
-
-                {/* 3. TOOLS PANE */}
-                <div className="w-72 bg-white border-l border-gray-200 flex flex-col z-20 overflow-y-auto shrink-0">
-                     <div className="p-4 border-b border-gray-100">
-                        <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                             <Layout size={16}/> 发布工具箱
-                        </h3>
-                     </div>
-                     
-                     <div className="p-4 space-y-6">
-                        {/* Copy Actions */}
-                        <div className="space-y-3">
-                           <button 
-                                id="copy-wx-btn"
-                                onClick={copyToWeChat}
-                                className="w-full py-3 bg-[#07c160] hover:bg-[#06ad56] text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-100"
-                            >
-                                <Send size={16} />
-                                复制到公众号
-                            </button>
-
-                           <button 
-                                onClick={copyMarkdown}
-                                className="w-full py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all"
-                            >
-                                <Copy size={16} />
-                                复制 Markdown
-                            </button>
-                            <p className="text-[10px] text-gray-400 text-center px-2">
-                                💡 点击绿色按钮复制后，直接在微信公众号后台按 Ctrl+V 粘贴即可。
-                            </p>
-                        </div>
-
-                        {/* Image Editor Section */}
-                        <div className="border-t border-gray-100 pt-6">
-                           <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-1">
-                             <Palette size={12}/> 配图设置
-                           </h4>
-                           
-                           <div className="space-y-3">
-                              <div className="flex gap-2">
-                                 <input 
-                                   type="text" 
-                                   value={editingImageQuery}
-                                   onChange={(e) => setEditingImageQuery(e.target.value)}
-                                   onKeyDown={(e) => e.key === 'Enter' && handleImageSearch()}
-                                   className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 outline-none focus:border-emerald-500 transition-colors"
-                                   placeholder="输入关键词搜索图片..."
-                                 />
-                                 <button 
-                                    onClick={handleImageSearch}
-                                    disabled={isSearchingImages}
-                                    className="bg-emerald-50 text-emerald-600 p-2 rounded-lg hover:bg-emerald-100 transition-colors"
-                                 >
-                                    {isSearchingImages ? <Loader2 size={16} className="animate-spin"/> : <Search size={16}/>}
-                                 </button>
-                              </div>
-
-                              {imageCandidates.length > 0 && (
-                                  <div className="grid grid-cols-2 gap-2 mt-2">
-                                      {imageCandidates.map((url, idx) => (
-                                          <button 
-                                            key={idx}
-                                            onClick={() => handleSelectImage(url)}
-                                            className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all group ${
-                                                currentArticle.imageUrl === url ? "border-emerald-500 ring-2 ring-emerald-200" : "border-transparent hover:border-gray-300"
-                                            }`}
-                                          >
-                                              <img src={url} alt="Candidate" className="w-full h-full object-cover"/>
-                                              {currentArticle.imageUrl === url && (
-                                                  <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-                                                      <CheckCircle2 size={16} className="text-white drop-shadow-md"/>
-                                                  </div>
-                                              )}
-                                          </button>
-                                      ))}
-                                  </div>
-                              )}
-                           </div>
-                        </div>
-
-                        <div className="border-t border-gray-100 pt-6 mt-auto">
-                            <button 
-                                onClick={() => {
-                                    setCurrentStep(AppStep.TOPIC_SEARCH);
-                                    setSearchResult(null);
-                                }}
-                                className="w-full py-2 text-gray-500 hover:bg-gray-50 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors border border-gray-200"
-                            >
-                                <RefreshCw size={14} />
-                                开始新创作
-                            </button>
-                        </div>
-                     </div>
-                </div>
-              </>
-            ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-4">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
-                        <Layout size={24} className="text-gray-300"/>
-                    </div>
-                    <p className="text-sm">请从左侧选择文章</p>
-                </div>
-            )}
+                )}
+            </div>
           </div>
         )}
 
       </main>
+
+      {/* Image Modal */}
+      {isImageModalOpen && currentArticle?.imageUrl && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <button 
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsImageModalOpen(false);
+            }}
+          >
+            <X size={32} />
+          </button>
+          <img 
+            src={currentArticle.imageUrl} 
+            alt="Full View" 
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()} 
+          />
+        </div>
+      )}
     </div>
   );
 };

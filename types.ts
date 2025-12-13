@@ -40,10 +40,12 @@ export interface GeneratedArticle {
   imageSearchQuery?: string;
   imageUrl?: string;
   originalTopic?: string;
+  category?: string;
   // Metadata about the agents
   agentLog?: {
     angle: string;
     tone: string;
+    style?: string;
   }
 }
 
@@ -53,4 +55,15 @@ export enum TopicCategory {
   LIFESTYLE = "生活与健康",
   ENTERTAINMENT = "娱乐八卦",
   GENERAL = "综合热点"
+}
+
+export enum ArticleStyle {
+  PROFESSIONAL = "深度专业",
+  HUMOROUS = "风趣幽默",
+  SHARP = "犀利痛快",
+  EMOTIONAL = "温情走心",
+  EDUCATIONAL = "通俗科普",
+  NEWS = "新闻报道",
+  OPINION = "观点评论",
+  TUTORIAL = "实操教程"
 }
