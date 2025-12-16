@@ -49,6 +49,27 @@ export interface GeneratedArticle {
   }
 }
 
+export enum AIProvider {
+  GOOGLE = "google",
+  CUSTOM = "custom" // OpenAI Compatible (DeepSeek, Moonshot, Local, etc.)
+}
+
+export interface AISettings {
+  provider: AIProvider;
+  
+  // Google Configuration
+  writerModel: string; // 'gemini-3-pro-preview' | 'gemini-2.5-flash'
+  
+  // Custom Configuration (OpenAI Compatible)
+  customBaseUrl: string;
+  customApiKey: string;
+  customModel: string;
+
+  // Common Configuration
+  creativity: number; // 0.0 to 1.0 (Temperature)
+  globalRules: string; // Custom instructions applied to all agents
+}
+
 export enum TopicCategory {
   TECH = "科技与AI",
   FINANCE = "金融与市场",

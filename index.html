@@ -21,7 +21,7 @@
         scrollbar-width: none;
       }
 
-      /* --- Doocs / WeChat Theme (Green Default) --- */
+      /* --- WeChat Rich Theme (Green Default) --- */
       
       .wx-article {
         font-size: 16px;
@@ -29,58 +29,61 @@
         color: #3f3f3f;
         text-align: justify;
         overflow-wrap: break-word;
+        letter-spacing: 0.5px;
       }
       
       /* Paragraphs */
       .wx-article p {
         margin-bottom: 16px;
-        letter-spacing: 0.5px;
       }
 
-      /* H1 (Usually not used in body, but styled just in case) */
+      /* H1 */
       .wx-article h1 {
-        font-size: 24px;
+        font-size: 22px;
         font-weight: bold;
         margin-top: 30px;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
         text-align: center;
         color: #333;
+        line-height: 1.4;
       }
 
-      /* H2 - Doocs Style: Green Bottom Border + Center/Left */
+      /* H2: Green Bottom Border */
       .wx-article h2 {
         display: block;
-        font-size: 20px;
+        font-size: 18px;
         font-weight: bold;
         margin-top: 40px;
         margin-bottom: 20px;
         padding-bottom: 10px;
-        border-bottom: 2px solid #07c160; /* WeChat Green */
-        color: #3f3f3f;
+        border-bottom: 2px solid #07c160;
+        color: #333;
         text-align: center;
       }
       
-      /* H3 - Doocs Style: Left Border */
+      /* H3: Left Border */
       .wx-article h3 {
-        font-size: 17px;
+        font-size: 16px;
         font-weight: bold;
         margin-top: 30px;
         margin-bottom: 15px;
         padding-left: 10px;
         border-left: 4px solid #07c160;
-        color: #3f3f3f;
+        color: #333;
         line-height: 1.4;
       }
 
-      /* Blockquote - Doocs Style: Light Gray BG, Green Left Border */
+      /* Blockquote: Rich Style with Shadow */
       .wx-article blockquote {
         margin: 20px 0;
         padding: 16px;
         background: #f8f9fa;
         border-left: 4px solid #07c160;
         border-radius: 4px;
-        color: #666;
+        color: #555;
         font-size: 15px;
+        line-height: 1.6;
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.05);
       }
       
       .wx-article blockquote p {
@@ -91,6 +94,7 @@
       .wx-article ul, .wx-article ol {
         margin-bottom: 16px;
         padding-left: 20px;
+        color: #3f3f3f;
       }
       
       .wx-article ul {
@@ -102,7 +106,8 @@
       }
       
       .wx-article li {
-        margin-bottom: 8px;
+        margin-bottom: 6px;
+        line-height: 1.6;
       }
 
       /* Links */
@@ -110,6 +115,8 @@
         color: #07c160;
         text-decoration: none;
         border-bottom: 1px dashed #07c160;
+        font-weight: 500;
+        margin: 0 2px;
       }
 
       /* Bold */
@@ -117,16 +124,23 @@
         color: #07c160;
         font-weight: bold;
       }
+      
+      /* Italic */
+      .wx-article em {
+        font-style: italic;
+        color: #666;
+        padding-right: 2px;
+      }
 
       /* Inline Code */
       .wx-article code {
-        font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+        font-family: Menlo, Monaco, Consolas, "Andale Mono", "Ubuntu Mono", monospace;
         background-color: #fff5f5;
         color: #ff502c;
-        padding: 2px 4px;
-        border-radius: 3px;
+        padding: 2px 5px;
+        border-radius: 4px;
         font-size: 14px;
-        margin: 0 2px;
+        margin: 0 3px;
       }
 
       /* Code Block (Pre) */
@@ -134,14 +148,14 @@
         display: block;
         background-color: #282c34;
         color: #abb2bf;
-        padding: 15px;
-        border-radius: 5px;
-        font-size: 14px;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 13px;
         overflow-x: auto;
-        font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+        font-family: Menlo, Monaco, Consolas, "Andale Mono", "Ubuntu Mono", monospace;
         line-height: 1.5;
-        margin: 15px 0;
-        position: relative;
+        margin: 20px 0;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       }
 
       .wx-article pre code {
@@ -158,8 +172,8 @@
         max-width: 100%;
         height: auto;
         margin: 20px auto;
-        border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
       }
 
       /* Horizontal Rule */
@@ -175,20 +189,22 @@
         border-collapse: collapse;
         margin-bottom: 20px;
         font-size: 14px;
+        border: 1px solid #eee;
       }
       
       .wx-article th, .wx-article td {
         border: 1px solid #dfdfdf;
-        padding: 8px;
+        padding: 10px;
       }
       
       .wx-article th {
         background-color: #f8f8f8;
         font-weight: bold;
+        color: #333;
       }
       
       .wx-article tr:nth-child(2n) {
-        background-color: #f8f8f8;
+        background-color: #fafafa;
       }
     </style>
   <script type="importmap">
