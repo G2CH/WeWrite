@@ -132,6 +132,13 @@ const App: React.FC = () => {
         completedCount++;
         const prefix = `[${completedCount}/${total}] “${topic.title}”\n`;
         
+        // --- Rate Limit Protection Delay ---
+        // If not the first item, wait 5 seconds to cool down the API
+        if (completedCount > 1) {
+            setLoadingMessage(`${prefix}⏳ 正在缓冲，避免触发 API 限流 (等待 5秒)...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+
         try {
           // Agent 1: Editor
           setLoadingMessage(`${prefix}🤵 首席主编正在策划选题角度...`);
@@ -172,14 +179,22 @@ const App: React.FC = () => {
 
           newArticles.push(newArticle);
           
-        } catch (err) {
+          // Optimistically update history so user sees progress if loop crashes later
+          setHistory(prev => [newArticle, ...prev]);
+
+        } catch (err: any) {
           console.error(`Failed to generate article for topic ${topic.id}`, err);
+          // If 429 persists despite retry logic, we might want to stop
+          if (err?.status === 429) {
+             alert(`API 配额已耗尽，已停止生成。成功生成 ${newArticles.length} 篇。`);
+             break;
+          }
         }
       }
 
       if (newArticles.length > 0) {
-        setHistory(prev => [...newArticles, ...prev]);
-        setViewingArticleId(newArticles[0].id);
+        // setHistory updated in loop already for safety, but we ensure viewing ID is set
+        setViewingArticleId(newArticles[newArticles.length - 1].id); // View the last generated one
         setCurrentStep(AppStep.REVIEW_AND_EXPORT);
       } else {
         alert("生成失败，请重试。如果使用自定义 AI，请检查配置是否正确。");
